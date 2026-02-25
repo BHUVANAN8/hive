@@ -1961,12 +1961,12 @@ def cmd_update(args: argparse.Namespace) -> int:
             return None
 
     # Check for local changes
-    status = run_cmd(["git", "status", "--porcelain"])
-    if status is None:
+    status_proc = run_cmd(["git", "status", "--porcelain"])
+    if status_proc is None:
         print("Error: Failed to check git status. Are you in a git repository?")
         return 1
 
-    has_changes = status.stdout.strip()
+    has_changes = bool(status_proc.stdout.strip())
     stashed = False
 
     if has_changes and not getattr(args, "no_stash", False):
@@ -1980,21 +1980,49 @@ def cmd_update(args: argparse.Namespace) -> int:
     if not run_cmd(["git", "pull", "origin", "main"]):
         print("Error: Failed to pull latest changes.")
         if stashed:
-            print("Restoring stash...")
-            run_cmd(["git", "stash", "pop"])
+            print("Restoring stashed changes...")
+            # We use subprocess directly to better handle stash pop conflicts
+            try:
+                subprocess.run(["git", "stash", "pop"], cwd=project_root, check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError:
+                print("\n" + "!" * 60)
+                print("CONFLICT DETECTED while restoring stash!")
+                print("Your changes are still in the stash. Please resolve manually:")
+                print("  1. git stash list   (to see your stashed changes)")
+                print("  2. git stash pop    (to attempt manual resolve)")
+                print("!" * 60 + "\n")
         return 1
 
     print("Syncing dependencies...")
     if not run_cmd(["uv", "sync"]):
         print("Error: Failed to sync dependencies via uv.")
         if stashed:
-            print("Restoring stash...")
-            run_cmd(["git", "stash", "pop"])
+            print("Restoring stashed changes...")
+            try:
+                subprocess.run(["git", "stash", "pop"], cwd=project_root, check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError:
+                print("\n" + "!" * 60)
+                print("CONFLICT DETECTED while restoring stash!")
+                print("Your changes are still in the stash. Please resolve manually:")
+                print("  1. git stash list")
+                print("  2. git stash pop")
+                print("!" * 60 + "\n")
         return 1
 
     if stashed:
         print("Restoring local changes...")
-        run_cmd(["git", "stash", "pop"])
+        try:
+            subprocess.run(["git", "stash", "pop"], cwd=project_root, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print("\n" + "!" * 60)
+            print("CONFLICT DETECTED while restoring local changes!")
+            if e.stdout:
+                print(e.stdout)
+            print("Your changes are still in the stash. Please resolve manually:")
+            print("  1. git stash list")
+            print("  2. git stash pop")
+            print("!" * 60 + "\n")
+            return 1 # Fail if we couldn't restore completely
 
     print("\n" + "=" * 60)
     print(" Hive successfully updated to latest version!")

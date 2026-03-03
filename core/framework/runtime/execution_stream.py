@@ -803,11 +803,11 @@ class ExecutionStream:
 
             # Write state.json
             await self._session_store.write_state(execution_id, state)
-            logger.debug(f"Wrote state.json for session {execution_id} (status={status})")
+            logger.debug("Wrote state.json for session %s (status=%s)", execution_id, status)
 
         except Exception as e:
             # Log but don't fail the execution
-            logger.error(f"Failed to write state.json for {execution_id}: {e}")
+            logger.error("Failed to write state.json for %s: %s", execution_id, e)
 
     def _create_modified_graph(self) -> "GraphSpec":
         """Create a graph with the entry point overridden.
